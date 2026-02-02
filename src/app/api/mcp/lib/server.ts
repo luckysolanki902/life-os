@@ -1,24 +1,7 @@
 /**
  * MCP Server Instance
- * Central MCP server configuration with all tools registered
+ * Central MCP server configuration
  */
-
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerBookTools } from '../tools/books';
-import { getCredentials } from './auth';
-
-// Create and configure the MCP server
-export function createMcpServer(): McpServer {
-  const server = new McpServer({
-    name: 'lifedashboard-books-mcp',
-    version: '1.0.0',
-  });
-
-  // Register all tools
-  registerBookTools(server);
-
-  return server;
-}
 
 // Server info for discovery
 export const serverInfo = {
@@ -31,6 +14,3 @@ export const serverInfo = {
     },
   },
 };
-
-// Re-export getCredentials for convenience
-export { getCredentials };

@@ -4,11 +4,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { serverInfo, getCredentials } from '../lib/server';
-import { getCredentials as getAuthCredentials } from '../lib/auth';
+import { serverInfo } from '@/app/api/mcp/lib/server';
+import { getCredentials } from '@/app/api/mcp/lib/auth';
 
 export async function GET() {
-  const credentials = getAuthCredentials();
+  const credentials = getCredentials();
   
   return NextResponse.json({
     name: serverInfo.name,

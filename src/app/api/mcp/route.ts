@@ -10,9 +10,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { validateAuth } from './lib/auth';
-import { serverInfo } from './lib/server';
-import { handleMcpRequest } from './lib/handler';
+import { validateAuth } from '@/app/api/mcp/lib/auth';
+import { serverInfo } from '@/app/api/mcp/lib/server';
+import { handleMcpRequest } from '@/app/api/mcp/lib/handler';
 
 // CORS headers for all responses
 const corsHeaders = {
