@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Clock, Edit2, Trash2, X, CalendarDays, Bell, SkipForward } from 'lucide-react';
+import { Check, Edit2, Trash2, X, CalendarDays, SkipForward, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { completeTask, uncompleteTask, updateTask, deleteTask, skipTask, unskipTask } from '@/app/actions/routine';
 import { getLocalDateString } from '@/lib/date-utils';
@@ -57,10 +57,7 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
   const [domainId, setDomainId] = useState(task.domainId);
   const [timeOfDay, setTimeOfDay] = useState(task.timeOfDay || 'none');
   const [basePoints, setBasePoints] = useState(task.basePoints || 5);
-  const [isScheduled, setIsScheduled] = useState(task.isScheduled || false);
-  const [startTime, setStartTime] = useState(task.startTime || '');
-  const [endTime, setEndTime] = useState(task.endTime || '');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(task.notificationsEnabled ?? true);
+  const [mustDo, setMustDo] = useState(task.mustDo || false);
   const [recurrenceType, setRecurrenceType] = useState<'daily' | 'weekdays' | 'weekends' | 'custom'>(
     task.recurrenceType || 'daily'
   );
@@ -183,10 +180,7 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
       domainId,
       timeOfDay,
       basePoints,
-      isScheduled,
-      startTime: isScheduled ? startTime : null,
-      endTime: isScheduled ? endTime : null,
-      notificationsEnabled,
+      mustDo,
       recurrenceType,
       recurrenceDays: customDays,
     });
@@ -207,10 +201,7 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
     setDomainId(task.domainId);
     setTimeOfDay(task.timeOfDay || 'none');
     setBasePoints(task.basePoints || 5);
-    setIsScheduled(task.isScheduled || false);
-    setStartTime(task.startTime || '');
-    setEndTime(task.endTime || '');
-    setNotificationsEnabled(task.notificationsEnabled ?? true);
+    setMustDo(task.mustDo || false);
     setRecurrenceType(task.recurrenceType || 'daily');
     setCustomDays(task.recurrenceDays || []);
     setIsEditing(false);
@@ -283,54 +274,28 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
           />
         </div>
 
-        {/* Schedule */}
+        {/* Must Do Toggle */}
         <div className="space-y-2 pt-2 border-t border-border/50">
-          <div className="flex items-center justify-between">
+          <label className="flex items-center justify-between cursor-pointer group">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsScheduled(!isScheduled)}
-                className={cn(
-                  "p-2 rounded-lg transition-colors",
-                  isScheduled ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary'
-                )}
-              >
-                <Clock size={16} />
-              </button>
-              <span className="text-sm font-medium text-muted-foreground">Schedule</span>
-            </div>
-            
-            {isScheduled && (
-              <div className="flex items-center gap-2 animate-in slide-in-from-left-2">
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="rounded-lg border border-input bg-background px-2 py-1 text-xs outline-none scheme-dark"
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="rounded-lg border border-input bg-background px-2 py-1 text-xs outline-none scheme-dark"
-                />
+              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Target size={16} />
               </div>
-            )}
-          </div>
-
-          {isScheduled && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notificationsEnabled}
-                onChange={(e) => setNotificationsEnabled(e.target.checked)}
-                className="rounded"
+              <div>
+                <span className="text-sm font-medium">Must Do</span>
+                <p className="text-xs text-muted-foreground">High priority task</p>
+              </div>
+            </div>
+            <div className="relative inline-flex items-center">
+              <input 
+                type="checkbox" 
+                checked={mustDo}
+                onChange={(e) => setMustDo(e.target.checked)}
+                className="sr-only peer"
               />
-              <Bell size={14} className="text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Notify me</span>
-            </label>
-          )}
+              <div className="w-11 h-6 bg-secondary peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-none after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-muted-foreground after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-checked:after:bg-primary-foreground"></div>
+            </div>
+          </label>
         </div>
 
         {/* Recurrence */}
@@ -409,8 +374,15 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
         ? "bg-secondary/30 border-transparent opacity-60" 
         : isSkipped
         ? "bg-card border-border/30"
+        : task.mustDo
+        ? "bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/30 hover:border-primary/50 shadow-sm hover:shadow-md"
         : "bg-card border-border/50"
     )}>
+      {/* Must Do Accent Bar */}
+      {task.mustDo && !isCompleted && !isSkipped && (
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary/70 to-primary/40" />
+      )}
+      
       {/* Main Row */}
       <div className="p-4 flex items-center gap-4">
         {/* Checkbox / Status - show in non-edit mode only */}
@@ -423,6 +395,8 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
                 ? "bg-primary border-primary text-primary-foreground"
                 : isSkipped
                 ? "border-muted-foreground/30 hover:border-primary"
+                : task.mustDo
+                ? "border-primary/50 bg-primary/10 hover:bg-primary/20"
                 : "border-muted-foreground/30 hover:border-primary"
             )}
           >
@@ -434,6 +408,7 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
         <div className="flex-1 min-w-0">
           <h3 className={cn(
             "font-medium transition-all",
+            task.mustDo && !isCompleted && !isSkipped && "font-semibold",
             isCompleted && "line-through text-muted-foreground",
             isSkipped && "text-muted-foreground"
           )} style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -453,12 +428,6 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
             {task.timeOfDay && task.timeOfDay !== 'none' && (
               <span className="px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground capitalize text-[10px]">
                 {task.timeOfDay}
-              </span>
-            )}
-            {task.isScheduled && (
-              <span className="flex items-center gap-1">
-                <Clock size={10} />
-                {task.startTime}
               </span>
             )}
             <span className="px-1.5 py-0.5 rounded-md bg-secondary/50 text-muted-foreground/70 text-[10px]">

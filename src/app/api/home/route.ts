@@ -37,7 +37,8 @@ export async function GET() {
         domainId: t.domainId,
         timeOfDay: t.timeOfDay,
         points: t.basePoints || t.points,
-        status: t.log?.status || 'pending'
+        status: t.log?.status || 'pending',
+        mustDo: t.mustDo || false
       }));
 
     const domains = [

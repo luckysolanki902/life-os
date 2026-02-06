@@ -53,6 +53,7 @@ type Task = {
   points: number;
   status: 'pending' | 'completed' | 'skipped';
   completedAt?: string;
+  mustDo?: boolean;
 };
 
 type Props = {
@@ -558,6 +559,68 @@ export default function NewHomeClient({
         </div>
       </section>
 
+      {/* Must Do Tasks Section */}
+      {sortedTasks.some(t => t.mustDo && t.status !== 'completed' && t.status !== 'skipped') && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Target size={18} className="text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Must Do Today</h2>
+          </div>
+
+          <div className="space-y-2.5">
+            {sortedTasks
+              .filter(t => t.mustDo && t.status !== 'completed' && t.status !== 'skipped')
+              .map((task) => (
+              <SwipeableTask
+                key={task._id}
+                onSwipeLeft={() => handleToggleTask(task._id)}
+                onSwipeRight={() => handleSkipTask(task._id, false)}
+              >
+                <div
+                  className="group flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/30 transition-all shadow-sm active:scale-[0.99] hover:border-primary/50"
+                >
+                  <button
+                    onClick={() => handleToggleTask(task._id)}
+                    className={cn(
+                      "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
+                      "border-primary/50 bg-primary/10",
+                      task.status === 'completed' && "bg-primary border-primary text-primary-foreground" 
+                    )}
+                  >
+                    {task.status === 'completed' && <CheckCircle2 size={14} className="animate-in zoom-in duration-200" />}
+                  </button>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm truncate">{task.title}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                      <span className={getDomainColor(task.domainId)}>{task.domainId}</span>
+                      {task.timeOfDay && (
+                        <>
+                          <span>•</span>
+                          <span>{task.timeOfDay}</span>
+                        </>
+                      )}
+                      <span>•</span>
+                      <span>{task.points} pts</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleSkipTask(task._id, false)}
+                    className="p-2 rounded-lg text-muted-foreground/60 hover:bg-secondary transition-all"
+                    title="Skip"
+                  >
+                    <SkipForward size={16} />
+                  </button>
+                </div>
+              </SwipeableTask>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Today's Tasks */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -568,7 +631,7 @@ export default function NewHomeClient({
         </div>
 
         <div className="space-y-2.5">
-          {sortedTasks.filter(t => t.status !== 'completed' && t.status !== 'skipped').slice(0, 4).map((task) => (
+          {sortedTasks.filter(t => !t.mustDo && t.status !== 'completed' && t.status !== 'skipped').slice(0, 4).map((task) => (
             <SwipeableTask
               key={task._id}
               onSwipeLeft={() => handleToggleTask(task._id)}
@@ -615,7 +678,7 @@ export default function NewHomeClient({
             </SwipeableTask>
           ))}
 
-          {sortedTasks.filter(t => t.status !== 'completed' && t.status !== 'skipped').length === 0 && (
+          {sortedTasks.filter(t => !t.mustDo && t.status !== 'completed' && t.status !== 'skipped').length === 0 && (
              <div className="py-8 text-center bg-card/30 rounded-xl border border-border/30 border-dashed">
                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 mb-3">
                  <CheckCircle2 size={24} />

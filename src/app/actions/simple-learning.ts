@@ -404,7 +404,7 @@ export async function getAllSkills() {
   return skillsWithCategory;
 }
 
-// Get today's learning logs for routine special tasks
+// Get today's learning logs
 export async function getTodaysLearningLogs() {
   await connectDB();
   

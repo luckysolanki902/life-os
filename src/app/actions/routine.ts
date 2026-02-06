@@ -167,10 +167,7 @@ export async function createTask(formData: FormData) {
   const basePoints = Number(formData.get('basePoints'));
   const timeOfDay = formData.get('timeOfDay') || 'none';
   
-  const isScheduled = formData.get('isScheduled') === 'true';
-  const startTime = formData.get('startTime');
-  const endTime = formData.get('endTime');
-  const notificationsEnabled = formData.get('notificationsEnabled') === 'on';
+  const mustDo = formData.get('mustDo') === 'true';
   
   // Recurrence
   const recurrenceType = formData.get('recurrenceType') || 'daily';
@@ -185,10 +182,7 @@ export async function createTask(formData: FormData) {
     domainId,
     basePoints,
     timeOfDay,
-    isScheduled,
-    startTime: isScheduled ? startTime : null,
-    endTime: isScheduled ? endTime : null,
-    notificationsEnabled,
+    mustDo,
     recurrenceType,
     recurrenceDays,
     order: 999, // Append to end
@@ -205,10 +199,7 @@ export async function updateTask(taskId: string, data: {
   domainId?: string;
   timeOfDay?: string;
   basePoints?: number;
-  isScheduled?: boolean;
-  startTime?: string | null;
-  endTime?: string | null;
-  notificationsEnabled?: boolean;
+  mustDo?: boolean;
   recurrenceType?: string;
   recurrenceDays?: number[];
 }) {

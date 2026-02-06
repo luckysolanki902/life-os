@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, X, Clock, Bell, Upload, CalendarDays } from 'lucide-react';
+import { Plus, X, Upload, CalendarDays, Target } from 'lucide-react';
 import { createTask, bulkCreateTasks } from '@/app/actions/routine';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +18,7 @@ const DAYS_OF_WEEK = [
 export default function NewTaskForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
-  const [isScheduled, setIsScheduled] = useState(false);
+  const [mustDo, setMustDo] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [csvInput, setCsvInput] = useState(
     'Morning Run, health, morning, 5, 07:00, daily\nRead Book, learning, evening, 3, , weekdays\nFamily Call, social, night, 2, , sun|sat'
@@ -38,7 +38,7 @@ export default function NewTaskForm() {
     setIsPending(true);
     
     // Append boolean flags
-    formData.append('isScheduled', isScheduled.toString());
+    formData.append('mustDo', mustDo.toString());
     formData.append('recurrenceType', recurrenceType);
     formData.append('recurrenceDays', JSON.stringify(customDays));
     // Pass client timezone
@@ -49,7 +49,7 @@ export default function NewTaskForm() {
     // Reset form
     setIsPending(false);
     setIsOpen(false);
-    setIsScheduled(false);
+    setMustDo(false);
     setRecurrenceType('daily');
     setCustomDays([]);
   }
@@ -203,53 +203,28 @@ export default function NewTaskForm() {
           </div>
         </div>
 
-        {/* Scheduling & Notifications */}
+        {/* Must Do Toggle */}
         <div className="space-y-3 pt-2 border-t border-border/50">
-          <div className="flex items-center justify-between">
+          <label className="flex items-center justify-between cursor-pointer group">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsScheduled(!isScheduled)}
-                className={`p-2 rounded-lg transition-colors ${isScheduled ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary'}`}
-              >
-                <Clock size={18} />
-              </button>
-              <span className="text-sm font-medium text-muted-foreground">Schedule</span>
-            </div>
-            
-            {isScheduled && (
-              <div className="flex items-center gap-2 animate-in slide-in-from-left-2">
-                <input
-                  type="time"
-                  name="startTime"
-                  className="rounded-lg border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/20 [color-scheme:dark]"
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <input
-                  type="time"
-                  name="endTime"
-                  className="rounded-lg border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/20 [color-scheme:dark]"
-                />
+              <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Target size={18} />
               </div>
-            )}
-          </div>
-
-          {isScheduled && (
-            <div className="flex items-center gap-2 animate-in slide-in-from-top-1">
-               <label className="relative inline-flex items-center cursor-pointer group">
-                 <input 
-                   type="checkbox" 
-                   name="notificationsEnabled" 
-                   defaultChecked
-                   className="sr-only peer"
-                 />
-                 <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-none after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-checked:after:bg-black"></div>
-                 <span className="ml-2 text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors flex items-center gap-1.5">
-                   <Bell size={14} /> Notify me
-                 </span>
-               </label>
+              <div>
+                <span className="text-sm font-medium">Must Do</span>
+                <p className="text-xs text-muted-foreground">High priority task</p>
+              </div>
             </div>
-          )}
+            <div className="relative inline-flex items-center">
+              <input 
+                type="checkbox" 
+                checked={mustDo}
+                onChange={(e) => setMustDo(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-secondary peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-none after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-muted-foreground after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-checked:after:bg-primary-foreground"></div>
+            </div>
+          </label>
         </div>
 
         {/* Recurrence Settings */}

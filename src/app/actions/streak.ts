@@ -5,7 +5,6 @@ import DailyStreakRecord, { STREAK_TARGETS } from '@/models/DailyStreakRecord';
 import DailyLog from '@/models/DailyLog';
 import ExerciseLog from '@/models/ExerciseLog';
 import BookLog from '@/models/BookLog';
-import SimpleLearningLog from '@/models/SimpleLearningLog';
 import Book from '@/models/Book';
 import { revalidatePath } from 'next/cache';
 import {
@@ -19,7 +18,6 @@ const MIN_ROUTINE_TASKS = 5;
 const MIN_BOOK_READING_MINUTES = 5;
 const BOOK_TASK_POINTS = 20;
 const EXERCISE_TASK_POINTS = 25;
-const LEARNING_TASK_POINTS = 15;
 
 // Helper: Check if a day can be considered a rest day (after 2+ consecutive workout days)
 async function canBeRestDay(dateStr: string): Promise<boolean> {
@@ -349,51 +347,6 @@ export async function getSpecialTasks(dateStr?: string) {
     }
   }
   
-  // Check for learning logs today
-  const learningLogs = await SimpleLearningLog.find({
-    date: { $gte: startOfDay, $lt: endOfDay }
-  }).populate('skillId').lean();
-  
-  console.log('[getSpecialTasks] Learning logs found:', learningLogs.length);
-  console.log('[getSpecialTasks] Date range:', { startOfDay, endOfDay, today });
-  console.log('[getSpecialTasks] Raw learning logs:', learningLogs);
-  
-  // Group by skill name
-  const skillMap = new Map<string, number>();
-  for (const log of learningLogs) {
-    const skill = (log as any).skillId;
-    const skillName = skill?.name || 'Unknown Skill';
-    const duration = (log as any).duration;
-    
-    console.log('[getSpecialTasks] Processing learning log:', { 
-      skillName, 
-      duration, 
-      logDate: (log as any).date,
-      hasSkillId: !!(log as any).skillId,
-      skillIdType: typeof (log as any).skillId
-    });
-    
-    const current = skillMap.get(skillName) || 0;
-    skillMap.set(skillName, current + duration);
-  }
-  
-  console.log('[getSpecialTasks] Skill map:', Array.from(skillMap.entries()));
-  
-  for (const [skillName, duration] of skillMap) {
-    if (duration >= 1) { // At least 1 minute
-      const task = {
-        _id: `special-learning-${skillName}-${today}`,
-        title: `Learnt ${skillName}`,
-        type: 'learning' as const,
-        points: LEARNING_TASK_POINTS,
-        completed: true,
-        source: `${duration} minutes`
-      };
-      console.log('[getSpecialTasks] Adding learning task:', task);
-      specialTasks.push(task);
-    }
-  }
-  
   console.log('[getSpecialTasks] Final special tasks count:', specialTasks.length);
   console.log('[getSpecialTasks] All special tasks:', specialTasks);
   
@@ -431,16 +384,10 @@ export async function getTotalPointsWithBonuses() {
   const exerciseDays = await ExerciseLog.distinct('date');
   const exercisePoints = exerciseDays.length * EXERCISE_TASK_POINTS;
   
-  // Count learning sessions
-  const learningDaysWithSkills = await SimpleLearningLog.aggregate([
-    { $group: { _id: { date: '$date', skill: '$skillName' } } },
-    { $count: 'total' }
-  ]);
-  const learningPoints = (learningDaysWithSkills[0]?.total || 0) * LEARNING_TASK_POINTS;
   return {
     basePoints,
     streakBonus,
-    specialTaskPoints: bookPoints + exercisePoints + learningPoints,
-    totalPoints: basePoints + streakBonus + bookPoints + exercisePoints + learningPoints
+    specialTaskPoints: bookPoints + exercisePoints,
+    totalPoints: basePoints + streakBonus + bookPoints + exercisePoints
   };
 }

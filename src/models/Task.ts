@@ -19,6 +19,7 @@ const TaskSchema = new mongoose.Schema({
   },
   basePoints: { type: Number, default: 1 },
   isActive: { type: Boolean, default: true }, // Soft delete
+  mustDo: { type: Boolean, default: false }, // Priority tasks that must be done
   // Recurrence fields
   recurrenceType: { 
     type: String, 
