@@ -1,77 +1,39 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { Loader2, RotateCw } from 'lucide-react';
+import { useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import NewHomeClient from './NewHomeClient';
 
-export default function HomePageClient() {
-  const [data, setData] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+interface HomeData {
+  incompleteTasks: any[];
+  domains: any[];
+  todaysWeight: any;
+  streakData: any;
+  specialTasks: any[];
+  totalPoints: number;
+  last7DaysCompletion: any[];
+}
+
+export default function HomePageClient({ initialData }: { initialData: HomeData }) {
+  const [data, setData] = useState<HomeData>(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const fetchedRef = useRef(false);
-
-  const fetchData = async () => {
-    try {
-      const res = await fetch('/api/home');
-      if (!res.ok) throw new Error('Failed to fetch');
-      const json = await res.json();
-      setData(json);
-    } catch (error) {
-      console.error('[Home] Fetch error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    fetchData();
-  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      // Trigger RxDB sync in background (fire and forget)
+      // Trigger RxDB sync in background
       import('@/lib/rxdb/replication').then(m => m.forceSync()).catch(() => {});
-      await fetchData();
+      const res = await fetch('/api/home');
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
+    } catch (error) {
+      console.error('[Home] Refresh error:', error);
     } finally {
       setTimeout(() => setIsRefreshing(false), 300);
     }
   };
-
-  if (isLoading && !data) {
-    return (
-      <div className="space-y-4 pt-4 px-1">
-        <div className="flex justify-between items-center mb-6">
-           <div className="space-y-2">
-              <div className="h-6 w-32 bg-secondary/50 rounded-lg animate-pulse" />
-              <div className="h-4 w-24 bg-secondary/30 rounded-lg animate-pulse" />
-           </div>
-           <div className="h-8 w-16 bg-secondary/50 rounded-full animate-pulse" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-           <div className="h-32 bg-card border border-border/50 rounded-2xl animate-pulse" />
-           <div className="h-32 bg-card border border-border/50 rounded-2xl animate-pulse" />
-        </div>
-        <div className="space-y-2 pt-4">
-          <div className="h-6 w-24 bg-secondary/30 rounded-lg mb-2 animate-pulse" />
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-card border border-border/50 rounded-2xl animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground flex-col gap-2">
-        <Loader2 className="animate-spin text-primary" size={32} />
-        <p>Loading dashboard...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="relative">
