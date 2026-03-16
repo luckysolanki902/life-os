@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getOverallReport, getDashboardStats } from '../actions/reports';
-import { getCache, setCache, CACHE_KEYS, subscribe } from '@/lib/reactive-cache';
 
 const PERIODS = [
   { value: 'last7Days', label: '7D' },
@@ -319,32 +318,13 @@ function MinimalTooltip({ active, payload, label }: TooltipProps) {
 export default function ReportsClient() {
   const router = useRouter();
   const [period, setPeriod] = useState('last7Days');
-  // Initialize with cached data for instant render
-  const [data, setData] = useState<ReportData | null>(() => {
-    if (typeof window !== 'undefined') {
-      return getCache<ReportData>(CACHE_KEYS.REPORTS_DATA);
-    }
-    return null;
-  });
-  const [stats, setStats] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      return getCache<any>(CACHE_KEYS.DASHBOARD_STATS);
-    }
-    return null;
-  });
-  const [isLoading, setIsLoading] = useState(!data); // Only loading if no cache
+  const [data, setData] = useState<ReportData | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncingBg, setIsSyncingBg] = useState(false);
 
-  // Subscribe to dashboard stats updates (synced from home page)
-  useEffect(() => {
-    const unsubscribe = subscribe<any>(CACHE_KEYS.DASHBOARD_STATS, (newStats) => {
-      if (newStats) setStats(newStats);
-    });
-    return unsubscribe;
-  }, []);
-
-  // Background sync check - compare local vs server data
+  // Fetch data on mount and when period changes
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
@@ -360,13 +340,10 @@ export default function ReportsClient() {
           // Smoothly update data in background
           setTimeout(() => {
             setData(result);
-            setCache(CACHE_KEYS.REPORTS_DATA, result);
             setIsSyncingBg(false);
           }, 300);
         } else if (!data) {
-          // First load
           setData(result);
-          setCache(CACHE_KEYS.REPORTS_DATA, result);
         }
       } catch (error) {
         console.error('Background sync failed:', error);
@@ -378,8 +355,8 @@ export default function ReportsClient() {
     if (!data) setIsLoading(true);
     checkForUpdates().finally(() => setIsLoading(false));
 
-    // Check every 5 seconds
-    intervalId = setInterval(checkForUpdates, 5000);
+    // Check every 30 seconds (RxDB handles real-time sync)
+    intervalId = setInterval(checkForUpdates, 30000);
 
     return () => clearInterval(intervalId);
   }, [period]);
@@ -388,7 +365,6 @@ export default function ReportsClient() {
   useEffect(() => {
     getDashboardStats().then((result) => {
       setStats(result);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, result);
     }).catch(console.error);
   }, []);
 
@@ -405,10 +381,6 @@ export default function ReportsClient() {
       ]);
       setData(result);
       setStats(dashboardStats);
-      
-      // Update caches
-      setCache(CACHE_KEYS.REPORTS_DATA, result);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, dashboardStats);
       
       router.refresh();
     } catch (error) {

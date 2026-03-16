@@ -17,17 +17,8 @@ import { getDashboardStats } from '@/app/actions/reports';
 import { getBetterPercentage } from '@/lib/better';
 import { format } from 'date-fns';
 
-import { 
-  markTaskCompleted, 
-  markTaskSkipped, 
-  markTaskPending, 
-  setCache, 
-  CACHE_KEYS,
-  removeTaskFromIncomplete,
-  updateWeightInCache,
-  subscribe
-} from '@/lib/reactive-cache';
-import { withFullRefresh } from '@/lib/action-wrapper';
+import { withRxDB, localUpsert } from '@/lib/rxdb/actions';
+import { COLLECTION_NAMES, forceSync } from '@/lib/rxdb';
 
 // Fallback toast hook if '@/components/ui/use-toast' is unavailable
 function useToast() {
@@ -109,22 +100,11 @@ export default function NewHomeClient({
     return null;
   });
 
-  // Fetch and subscribe to dashboard stats
+  // Fetch dashboard stats
   useEffect(() => {
     getDashboardStats().then((stats) => {
       setDashboardStats(stats);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, stats);
     }).catch(console.error);
-
-    // Subscribe to dashboard stats updates
-    const unsubscribe = subscribe<any>(CACHE_KEYS.DASHBOARD_STATS, (stats) => {
-      if (stats) {
-        console.log('[NewHomeClient] Dashboard stats updated:', stats);
-        setDashboardStats(stats);
-      }
-    });
-
-    return () => unsubscribe();
   }, []);
 
   // Optimistic Tasks (robust, no reversion on re-render)
@@ -150,27 +130,7 @@ export default function NewHomeClient({
   const [weightLoading, setWeightLoading] = useState(false);
   const [weightSuccess, setWeightSuccess] = useState(false);
 
-  // Subscribe to weight updates from other pages/devices
-  useEffect(() => {
-    const unsubscribeWeight = subscribe<any>(CACHE_KEYS.WEIGHT_DATA, (weightData) => {
-      if (weightData) {
-        console.log('[NewHomeClient] Weight cache updated:', weightData);
-        setTodaysWeight(weightData);
-      }
-    });
-    
-    const unsubscribeHome = subscribe<any>(CACHE_KEYS.HOME_DATA, (data) => {
-      if (data?.todaysWeight) {
-        console.log('[NewHomeClient] Home cache weight updated:', data.todaysWeight);
-        setTodaysWeight(data.todaysWeight);
-      }
-    });
-    
-    return () => {
-      unsubscribeWeight();
-      unsubscribeHome();
-    };
-  }, []);
+  // Weight updates come automatically via RxDB reactive props
 
   // Manual refresh handler
   const handleRefresh = async () => {
@@ -182,7 +142,6 @@ export default function NewHomeClient({
       // Refetch dashboard stats
       const stats = await getDashboardStats();
       setDashboardStats(stats);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, stats);
     } catch (error) {
       console.error('Failed to refresh:', error);
     } finally {
@@ -228,24 +187,16 @@ export default function NewHomeClient({
         : t
     )));
     
-    // Sync to reactive cache immediately
-    if (nextStatus === 'completed') {
-      markTaskCompleted(taskId);
-      removeTaskFromIncomplete(taskId);
-    } else {
-      markTaskPending(taskId);
-    }
-    
     try {
-      // Use withFullRefresh to auto-sync and refresh
-      await withFullRefresh(
-        () => toggleTaskStatus(taskId, originalStatus === 'completed')
+      // Run server action; RxDB replication handles sync
+      await withRxDB(
+        () => toggleTaskStatus(taskId, originalStatus === 'completed'),
+        { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] }
       );
       
-      // Refresh dashboard stats immediately
+      // Refresh dashboard stats
       const stats = await getDashboardStats();
       setDashboardStats(stats);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, stats);
     } catch (error) {
       // Revert both local state and cache
       setTasks(prev => prev.map(t => (
@@ -253,14 +204,6 @@ export default function NewHomeClient({
           ? { ...t, status: originalStatus, completedAt: originalCompletedAt }
           : t
       )));
-      // Revert cache
-      if (originalStatus === 'completed') {
-        markTaskCompleted(taskId);
-      } else if (originalStatus === 'skipped') {
-        markTaskSkipped(taskId);
-      } else {
-        markTaskPending(taskId);
-      }
       toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
     } finally {
       pendingTaskIdsRef.current.delete(taskId);
@@ -286,25 +229,17 @@ export default function NewHomeClient({
         : t
     )));
     
-    // Sync to reactive cache immediately
-    if (nextStatus === 'skipped') {
-      markTaskSkipped(taskId);
-    } else {
-      markTaskPending(taskId);
-    }
-    
     try {
-      // Use withFullRefresh to auto-sync and refresh
+      // Run server action; RxDB replication handles sync
       if (isUnskip) {
-        await withFullRefresh(() => unskipTask(taskId));
+        await withRxDB(() => unskipTask(taskId), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       } else {
-        await withFullRefresh(() => skipTask(taskId));
+        await withRxDB(() => skipTask(taskId), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       }
       
-      // Refresh dashboard stats immediately
+      // Refresh dashboard stats
       const stats = await getDashboardStats();
       setDashboardStats(stats);
-      setCache(CACHE_KEYS.DASHBOARD_STATS, stats);
     } catch (error) {
       // Revert both local state and cache
       setTasks(prev => prev.map(t => (
@@ -312,14 +247,6 @@ export default function NewHomeClient({
           ? { ...t, status: originalStatus, completedAt: originalCompletedAt }
           : t
       )));
-      // Revert cache
-      if (originalStatus === 'completed') {
-        markTaskCompleted(taskId);
-      } else if (originalStatus === 'skipped') {
-        markTaskSkipped(taskId);
-      } else {
-        markTaskPending(taskId);
-      }
       toast({ title: "Error", description: "Failed to skip task", variant: "destructive" });
     } finally {
       pendingTaskIdsRef.current.delete(taskId);
@@ -339,13 +266,12 @@ export default function NewHomeClient({
       date: new Date()
     };
     setTodaysWeight(optimisticWeight);
-    updateWeightInCache(weightValue, optimisticWeight);
     
     try {
-      // Use withFullRefresh to auto-sync and refresh
-      const result = await withFullRefresh(
+      // Run server action; RxDB replication handles sync
+      const result = await withRxDB(
         () => logWeight(weightValue, new Date().toISOString()),
-        () => updateWeightInCache(weightValue, optimisticWeight)
+        { syncCollections: [COLLECTION_NAMES.WEIGHT_LOGS] }
       );
       
       setTodaysWeight(result);

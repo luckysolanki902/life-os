@@ -3,77 +3,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, RotateCw } from 'lucide-react';
 import NewHomeClient from './NewHomeClient';
-import { useReactiveCache, setCache, CACHE_KEYS } from '@/lib/reactive-cache';
-import { startBackgroundSync, stopBackgroundSync, getDeviceId } from '@/lib/sync-manager';
-
-interface HomeData {
-  incompleteTasks: any[];
-  domains: any[];
-  todaysWeight: any;
-  streakData: any;
-  specialTasks: any[];
-  totalPoints: number;
-  last7DaysCompletion: any[];
-}
-
-async function fetchHomeData(): Promise<HomeData> {
-  const response = await fetch('/api/home', { cache: 'no-store' });
-  return response.json();
-}
+import { useHomeData, useRxDBContext } from '@/lib/rxdb';
 
 export default function HomePageClient() {
-  const hasFetched = useRef(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isReady, forceSync } = useRxDBContext();
   
-  // Use reactive cache - automatically syncs when cache updates
-  const { data, isLoading, refresh } = useReactiveCache<HomeData>(
-    CACHE_KEYS.HOME_DATA,
-    fetchHomeData
-  );
+  // Use RxDB reactive home data - auto-updates when local DB changes
+  const { data, isLoading } = useHomeData();
 
-  // Initialize background sync
-  useEffect(() => {
-    // Get device ID
-    const deviceId = getDeviceId();
-    console.log('[HomePageClient] Device ID:', deviceId);
-    
-    // Start background sync (checks every 5 seconds)
-    startBackgroundSync(5000);
-    
-    // Cleanup on unmount
-    return () => {
-      stopBackgroundSync();
-    };
-  }, []);
-
-  // Manual refresh function
+  // Manual refresh - triggers a sync cycle
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refresh();
+      await forceSync();
     } finally {
-      setIsRefreshing(false);
+      // Small delay to let subscriptions propagate
+      setTimeout(() => setIsRefreshing(false), 300);
     }
   };
 
-  // Also fetch fresh data on mount (background refresh)
-  useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-
-    // Background refresh - don't block UI
-    fetchHomeData()
-      .then((result) => {
-        setCache(CACHE_KEYS.HOME_DATA, result);
-      })
-      .catch(console.error);
-  }, []);
-
-  // Show minimal loading only if no cached data
-  if (isLoading && !data) {
+  // Show minimal loading only on truly first load (no local data yet)
+  if ((isLoading || !isReady) && !data) {
     return (
       <div className="space-y-4 pt-4 px-1">
-        {/* Minimal skeleton for truly first load */}
         <div className="flex justify-between items-center mb-6">
            <div className="space-y-2">
               <div className="h-6 w-32 bg-secondary/50 rounded-lg animate-pulse" />
@@ -104,10 +57,8 @@ export default function HomePageClient() {
     );
   }
 
-  // Pass everything to the new client which handles the full layout
   return (
     <div className="relative">
-      {/* Floating refresh button */}
       <button
         onClick={handleRefresh}
         disabled={isRefreshing}

@@ -6,7 +6,6 @@ import { getTodaysWorkoutSummary } from '@/app/actions/health';
 import { cn } from '@/lib/utils';
 import { shareImage } from '@/lib/share';
 import { getBetterPercentage } from '@/lib/better';
-import { getCache, CACHE_KEYS } from '@/lib/reactive-cache';
 
 // Rest day logic: Alternate day is fine - if yesterday had exercise, today can be rest
 
@@ -108,14 +107,7 @@ export default function ShareableWorkout({ canShare, hasWeight, isRestDay = fals
     setIsOpen(true);
     setIsLoading(true);
     try {
-      // Try to get cached dashboard stats first for faster display
-      const cachedStats = getCache<any>(CACHE_KEYS.DASHBOARD_STATS);
       const data = await getTodaysWorkoutSummary();
-      
-      // Use cached totalPoints if available and more recent
-      if (cachedStats && cachedStats.totalPoints) {
-        data.totalPoints = cachedStats.totalPoints;
-      }
       
       setSummary(data as WorkoutSummary);
       console.log(data.weight);

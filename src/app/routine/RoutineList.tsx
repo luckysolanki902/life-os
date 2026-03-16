@@ -24,8 +24,8 @@ import TaskItem from './TaskItem';
 import { updateTaskOrder, getRoutine, getRoutineForDate } from '@/app/actions/routine';
 import { cn } from '@/lib/utils';
 import { getLocalDateString, addDays, formatDateForDisplay, getDayOfWeek } from '@/lib/date-utils';
-import { useReactiveCache, setCache, CACHE_KEYS, subscribe } from '@/lib/reactive-cache';
-import { withFullRefresh } from '@/lib/action-wrapper';
+import { withRxDB } from '@/lib/rxdb/actions';
+import { COLLECTION_NAMES } from '@/lib/rxdb';
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sun' },
@@ -73,17 +73,16 @@ function SortableTaskItem({ task, dateStr, editMode }: { task: any; dateStr?: st
     position: 'relative' as const,
   };
 
-  // In edit mode, make whole card draggable
-  const dragProps = editMode ? { ...attributes, ...listeners } : {};
+  // In edit mode, pass drag handle props to TaskItem so only the drag handle captures drag events
+  const dragHandleProps = editMode ? { ...attributes, ...listeners } : undefined;
 
   return (
     <div 
       ref={setNodeRef} 
       style={style} 
-      className={cn(isDragging ? 'opacity-50' : '', editMode && 'cursor-grab active:cursor-grabbing touch-none')}
-      {...dragProps}
+      className={cn(isDragging ? 'opacity-50' : '')}
     >
-      <TaskItem task={task} dateStr={dateStr} editMode={editMode} />
+      <TaskItem task={task} dateStr={dateStr} editMode={editMode} dragHandleProps={dragHandleProps} />
     </div>
   );
 }
@@ -101,24 +100,6 @@ export default function RoutineList({ initialTasks, allTasks = [], initialSpecia
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [timeFilter, setTimeFilter] = useState('all');
   const [editMode, setEditMode] = useState(false);
-  
-  // Subscribe to cache updates for real-time sync
-  useEffect(() => {
-    const unsubscribe = subscribe<any>(CACHE_KEYS.HOME_DATA, (data) => {
-      if (data && viewMode === 'today') {
-        // Update tasks when home cache updates (from other pages)
-        console.log('[RoutineList] Cache updated, refreshing tasks');
-        const fetchToday = async () => {
-          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const { routine: todaysTasks, specialTasks: todaysSpecial } = await getRoutine(timezone);
-          setTasks(todaysTasks);
-          setSpecialTasks(todaysSpecial);
-        };
-        fetchToday();
-      }
-    });
-    return unsubscribe;
-  }, [viewMode]);
   
   // Custom date picker state
   const [customDate, setCustomDate] = useState<string>('');
@@ -231,23 +212,6 @@ export default function RoutineList({ initialTasks, allTasks = [], initialSpecia
     fetchWithTimezone();
   }, []);
 
-  // Subscribe to cache updates for real-time sync from other pages
-  useEffect(() => {
-    const unsubscribe = subscribe<any>(CACHE_KEYS.HOME_DATA, (data) => {
-      if (data && viewMode === 'today') {
-        console.log('[RoutineList] Cache updated, refreshing tasks');
-        const fetchToday = async () => {
-          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const { routine: todaysTasks, specialTasks: todaysSpecial } = await getRoutine(timezone);
-          setTasks(todaysTasks);
-          setSpecialTasks(todaysSpecial);
-        };
-        fetchToday();
-      }
-    });
-    return unsubscribe;
-  }, [viewMode]);
-
   // Sync with server data if it changes (e.g. new task added)
   useEffect(() => {
     console.log('[RoutineList] Initial tasks updated:', { tasksCount: initialTasks.length, specialTasksCount: initialSpecialTasks.length });
@@ -257,8 +221,17 @@ export default function RoutineList({ initialTasks, allTasks = [], initialSpecia
   }, [initialTasks, initialSpecialTasks]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(TouchSensor), // Added touch sensor for mobile drag
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement before drag starts
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200, // Hold 200ms before drag activates
+        tolerance: 5, // Allow 5px movement during delay (for scroll)
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -280,7 +253,7 @@ export default function RoutineList({ initialTasks, allTasks = [], initialSpecia
           id: item._id,
           order: index
         }));
-        withFullRefresh(() => updateTaskOrder(orderUpdates));
+        withRxDB(() => updateTaskOrder(orderUpdates), { syncCollections: [COLLECTION_NAMES.TASKS] });
 
         return newItems;
       });

@@ -21,8 +21,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { logWeight, createHealthPage, saveMood, updateWeight } from "@/app/actions/health";
-import { withFullRefresh } from '@/lib/action-wrapper';
-import { updateWeightInCache, subscribe, CACHE_KEYS } from '@/lib/reactive-cache';
+import { withRxDB } from '@/lib/rxdb/actions';
+import { COLLECTION_NAMES } from '@/lib/rxdb';
 import TaskItem from "@/app/routine/TaskItem";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -148,26 +148,6 @@ export default function HealthClient({ initialData }: HealthClientProps) {
     setSelectedMood(mood?.mood || null);
   }, [mood]);
 
-  // Subscribe to cache updates for real-time task and weight sync
-  useEffect(() => {
-    const unsubscribeHome = subscribe<any>(CACHE_KEYS.HOME_DATA, () => {
-      console.log('[HealthClient] Home cache updated, refreshing');
-      router.refresh();
-    });
-    
-    const unsubscribeWeight = subscribe<any>(CACHE_KEYS.WEIGHT_DATA, (weightData) => {
-      if (weightData) {
-        console.log('[HealthClient] Weight updated:', weightData);
-        router.refresh();
-      }
-    });
-    
-    return () => {
-      unsubscribeHome();
-      unsubscribeWeight();
-    };
-  }, [router]);
-
   // Filter tasks into categories
   const { activeTasks, doneTasks, skippedTasks } = useMemo(() => {
     const active: Task[] = [];
@@ -200,16 +180,14 @@ export default function HealthClient({ initialData }: HealthClientProps) {
     
     try {
       if (editingWeightId) {
-        // Update existing weight
-        await withFullRefresh(
+        await withRxDB(
           () => updateWeight(editingWeightId, weightValue),
-          () => updateWeightInCache(weightValue)
+          { syncCollections: [COLLECTION_NAMES.WEIGHT_LOGS] }
         );
       } else {
-        // Create new weight log with string date
-        await withFullRefresh(
+        await withRxDB(
           () => logWeight(weightValue, weightDate),
-          () => updateWeightInCache(weightValue)
+          { syncCollections: [COLLECTION_NAMES.WEIGHT_LOGS] }
         );
       }
       
@@ -237,7 +215,7 @@ export default function HealthClient({ initialData }: HealthClientProps) {
   async function handleCreatePage(e: React.FormEvent) {
     e.preventDefault();
     if (!pageTitle) return;
-    await withFullRefresh(() => createHealthPage(pageTitle));
+    await withRxDB(() => createHealthPage(pageTitle), { syncCollections: [COLLECTION_NAMES.HEALTH_PAGES] });
     setIsPageModalOpen(false);
     setPageTitle("");
     router.refresh();
@@ -247,11 +225,12 @@ export default function HealthClient({ initialData }: HealthClientProps) {
     setSelectedMood(moodValue);
     setIsSavingMood(true);
     // Send currentDate (YYYY-MM-DD) which represents the user's local date
-    await withFullRefresh(() => 
+    await withRxDB(() => 
       saveMood(
         currentDate,
         moodValue as "great" | "good" | "okay" | "low" | "bad"
-      )
+      ),
+      { syncCollections: [COLLECTION_NAMES.MOOD_LOGS] }
     );
     setIsSavingMood(false);
     router.refresh();

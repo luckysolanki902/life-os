@@ -1,19 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Edit2, Trash2, X, CalendarDays, SkipForward, Target } from 'lucide-react';
+import { Check, Edit2, Trash2, X, CalendarDays, SkipForward, Target, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { completeTask, uncompleteTask, updateTask, deleteTask, skipTask, unskipTask } from '@/app/actions/routine';
 import { getLocalDateString } from '@/lib/date-utils';
 import { hapticTaskComplete, hapticTaskSkip, hapticTaskUnskip, hapticTaskUncomplete } from '@/lib/haptics';
 
-import { withFullRefresh } from '@/lib/action-wrapper';
-import { 
-  markTaskCompleted, 
-  markTaskSkipped, 
-  markTaskPending,
-  removeTaskFromIncomplete
-} from '@/lib/reactive-cache';
+import { withRxDB } from '@/lib/rxdb/actions';
+import { COLLECTION_NAMES } from '@/lib/rxdb';
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'S', fullLabel: 'Sunday' },
@@ -41,9 +36,10 @@ interface TaskItemProps {
   onOptimisticToggle?: (taskId: string, newStatus: boolean) => void;
   dateStr?: string; // Optional date override (for historical views)
   editMode?: boolean; // Show edit controls only when in edit mode
+  dragHandleProps?: Record<string, any>; // dnd-kit drag handle props
 }
 
-export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode = false }: TaskItemProps) {
+export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode = false, dragHandleProps }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -93,25 +89,17 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
     
     // Optimistic update - instant UI change
     setOptimisticCompleted(newStatus);
-    setOptimisticSkipped(false); // Clear skipped state when completing
-    
-    // Update reactive cache immediately
-    if (newStatus) {
-      markTaskCompleted(task._id);
-      removeTaskFromIncomplete(task._id);
-    } else {
-      markTaskPending(task._id);
-    }
+    setOptimisticSkipped(false);
     
     // Notify parent for list-level optimistic update
     onOptimisticToggle?.(task._id, newStatus);
     
     try {
-      // Use withFullRefresh to auto-sync
+      // Server action; RxDB replication handles cross-device sync
       if (!newStatus) {
-        await withFullRefresh(() => uncompleteTask(task._id, targetDate));
+        await withRxDB(() => uncompleteTask(task._id, targetDate), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       } else {
-        await withFullRefresh(() => completeTask(task._id, targetDate));
+        await withRxDB(() => completeTask(task._id, targetDate), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       }
     } catch (error) {
       // Revert on error
@@ -140,21 +128,14 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
     
     // Optimistic update - instant UI change
     setOptimisticSkipped(newSkipStatus);
-    setOptimisticCompleted(false); // Clear completed state when skipping
-    
-    // Update reactive cache immediately
-    if (newSkipStatus) {
-      markTaskSkipped(task._id);
-    } else {
-      markTaskPending(task._id);
-    }
+    setOptimisticCompleted(false);
     
     try {
-      // Use withFullRefresh to auto-sync
+      // Server action; RxDB replication handles cross-device sync
       if (newSkipStatus) {
-        await withFullRefresh(() => skipTask(task._id, targetDate));
+        await withRxDB(() => skipTask(task._id, targetDate), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       } else {
-        await withFullRefresh(() => unskipTask(task._id, targetDate));
+        await withRxDB(() => unskipTask(task._id, targetDate), { syncCollections: [COLLECTION_NAMES.DAILY_LOGS] });
       }
     } catch (error) {
       // Revert on error
@@ -468,15 +449,15 @@ export default function TaskItem({ task, onOptimisticToggle, dateStr, editMode =
           </>
         )}
 
-        {/* Edit Button - show in edit mode with drag handle styling */}
+        {/* Drag handle in edit mode */}
         {editMode && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all shrink-0"
-            title="Edit task"
+          <div
+            className="p-2 rounded-lg text-muted-foreground/40 cursor-grab active:cursor-grabbing touch-none"
+            title="Drag to reorder"
+            {...dragHandleProps}
           >
-            <Edit2 size={16} />
-          </button>
+            <GripVertical size={20} />
+          </div>
         )}
       </div>
     </div>
