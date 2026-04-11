@@ -222,9 +222,10 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
   }
 
-  // For known/trusted clients (like ChatGPT which already provided credentials),
-  // auto-authorize and redirect with code immediately
-  if (clientId === STATIC_CLIENT_ID) {
+  // For known/trusted clients or PKCE flows (public clients like ChatGPT),
+  // auto-authorize and redirect with code immediately.
+  // PKCE provides security via code_challenge/code_verifier — no client_secret needed.
+  if (codeChallenge || clientId === STATIC_CLIENT_ID) {
     // Generate authorization code
     const code = generateCode();
     
