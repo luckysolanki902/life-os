@@ -13,9 +13,21 @@ import {
   getTodayDateString,
   getDateRange,
   getDayOfWeek,
-  getTodayDayOfWeek,
-  dayjs
+  getTodayDayOfWeek
 } from '@/lib/server-date-utils';
+
+const ALLOWED_BOOK_STATUSES = ['not-started', 'reading', 'finished'] as const;
+
+function normalizeBookStatus(status?: string | null): 'not-started' | 'reading' | 'finished' {
+  if (status === 'reading' || status === 'finished' || status === 'not-started') {
+    return status;
+  }
+
+  if (status === 'completed') return 'finished';
+  if (status === 'to-read' || status === 'paused' || status === 'dropped') return 'not-started';
+
+  return 'not-started';
+}
 
 // Helper function to check if a task should appear on a given day
 function shouldShowTaskOnDay(task: any, dayOfWeek: number): boolean {
@@ -35,29 +47,9 @@ function shouldShowTaskOnDay(task: any, dayOfWeek: number): boolean {
   }
 }
 
-// Auto-pause logic: if a book hasn't been read for 7 days, mark as paused
-async function autoUpdateBookStatuses() {
-  const today = getTodayISTMidnight();
-  const sevenDaysAgo = dayjs(today).tz('Asia/Kolkata').subtract(7, 'day').startOf('day').toDate();
-  
-  // Auto-pause books that haven't been read in 7 days and are still "reading"
-  await Book.updateMany(
-    {
-      status: 'reading',
-      lastReadDate: { $lt: sevenDaysAgo }
-    },
-    {
-      status: 'paused'
-    }
-  );
-}
-
 // ============ DASHBOARD DATA ============
 export async function getBooksDashboardData(page: number = 1, limit: number = 20, search?: string) {
   await connectDB();
-  
-  // Run auto-status update
-  await autoUpdateBookStatuses();
 
   // Get all domains with book counts
   const domains = await BookDomain.find().sort({ order: 1, createdAt: 1 }).lean();
@@ -65,7 +57,7 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
   const domainsWithStats = await Promise.all(domains.map(async (domain: any) => {
     const bookCount = await Book.countDocuments({ domainId: domain._id });
     const readingCount = await Book.countDocuments({ domainId: domain._id, status: 'reading' });
-    const completedCount = await Book.countDocuments({ domainId: domain._id, status: 'completed' });
+    const completedCount = await Book.countDocuments({ domainId: domain._id, status: 'finished' });
     
     return {
       ...domain,
@@ -83,7 +75,9 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
     query = {
       $or: [
         { title: { $regex: search, $options: 'i' } },
-        { author: { $regex: search, $options: 'i' } }
+        { author: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+        { subcategory: { $regex: search, $options: 'i' } }
       ]
     };
   }
@@ -92,7 +86,7 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
   const totalPages = Math.ceil(totalBooks / limit);
   
   const books = await Book.find(query)
-    .sort({ lastReadDate: -1, createdAt: -1 })
+    .sort({ order: 1, updatedAt: -1, createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
     .lean();
@@ -104,6 +98,10 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
       ...book,
       _id: book._id.toString(),
       domainId: book.domainId.toString(),
+      category: book.category || book.subcategory || 'General',
+      status: normalizeBookStatus(book.status),
+      startedOn: (book as any).startedOn || (book as any).startDate || null,
+      finishedOn: (book as any).finishedOn || (book as any).completedDate || null,
       domain: domain ? { 
         name: (domain as any).name, 
         color: (domain as any).color,
@@ -132,8 +130,8 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
         _id: (book as any)._id.toString(),
         title: (book as any).title,
         author: (book as any).author,
-        subcategory: (book as any).subcategory,
-        status: (book as any).status
+        category: (book as any).category || (book as any).subcategory || 'General',
+        status: normalizeBookStatus((book as any).status)
       },
       domain: domain ? { 
         name: (domain as any).name, 
@@ -180,10 +178,9 @@ export async function getBooksDashboardData(page: number = 1, limit: number = 20
   // Stats
   const stats = {
     totalBooks: await Book.countDocuments(),
-    toRead: await Book.countDocuments({ status: 'to-read' }),
+    notStarted: await Book.countDocuments({ status: 'not-started' }),
     reading: await Book.countDocuments({ status: 'reading' }),
-    paused: await Book.countDocuments({ status: 'paused' }),
-    completed: await Book.countDocuments({ status: 'completed' })
+    finished: await Book.countDocuments({ status: 'finished' })
   };
 
   return {
@@ -227,33 +224,71 @@ export async function deleteBookDomain(domainId: string) {
 
 // ============ BOOK CRUD ============
 export async function createBook(data: { 
-  domainId: string; 
+  domainId?: string; 
   title: string; 
   author?: string;
+  category?: string;
   subcategory?: string;
   totalPages?: number;
+  startedOn?: string;
+  finishedOn?: string;
   startDate?: string;
+  completedDate?: string;
   notes?: string;
   status?: string;
+  order?: number;
 }) {
   await connectDB();
-  const maxOrder = await Book.findOne({ domainId: data.domainId }).sort({ order: -1 }).lean();
+  let domainId = data.domainId;
+  if (!domainId) {
+    const existingDomain = await BookDomain.findOne().sort({ order: 1, createdAt: 1 }).lean();
+    if (existingDomain) {
+      domainId = (existingDomain as any)._id.toString();
+    } else {
+      const created = await BookDomain.create({ name: 'General', color: '#4A90D9', icon: '📚', order: 1 });
+      domainId = created._id.toString();
+    }
+  }
+
+  const maxOrder = await Book.findOne({ domainId }).sort({ order: -1 }).lean();
   
   // Don't auto-set lastReadDate or status - let user control when they start
   const bookData: any = { 
     ...data, 
-    order: ((maxOrder as any)?.order || 0) + 1 
+    domainId,
+    order: data.order ?? (((maxOrder as any)?.order || 0) + 1),
+    status: normalizeBookStatus(data.status),
+    category: data.category || data.subcategory || 'General'
   };
-  
-  // Only set startDate if explicitly provided - parse as IST midnight
-  if (data.startDate) {
-    bookData.startDate = parseToISTMidnight(data.startDate);
+
+  const startedOnInput = data.startedOn || data.startDate;
+  const finishedOnInput = data.finishedOn || data.completedDate;
+
+  if (startedOnInput) {
+    const started = parseToISTMidnight(startedOnInput);
+    bookData.startedOn = started;
+    bookData.startDate = started;
   }
-  
-  // Default to 'to-read' unless explicitly set
-  if (!data.status) {
-    bookData.status = 'to-read';
+
+  if (finishedOnInput) {
+    const finished = parseToISTMidnight(finishedOnInput);
+    bookData.finishedOn = finished;
+    bookData.completedDate = finished;
   }
+
+  if (bookData.status === 'reading' && !bookData.startedOn) {
+    const today = getTodayISTMidnight();
+    bookData.startedOn = today;
+    bookData.startDate = today;
+  }
+
+  if (bookData.status === 'finished' && !bookData.finishedOn) {
+    const today = getTodayISTMidnight();
+    bookData.finishedOn = today;
+    bookData.completedDate = today;
+  }
+
+  bookData.subcategory = bookData.category;
   
   await Book.create(bookData);
   revalidatePath('/books');
@@ -264,25 +299,63 @@ export async function updateBook(bookId: string, data: {
   domainId?: string;
   title?: string; 
   author?: string;
+  category?: string;
+  subcategory?: string;
   status?: string;
   totalPages?: number;
   currentPage?: number;
+  startedOn?: string;
+  finishedOn?: string;
   startDate?: string;
   completedDate?: string;
   notes?: string;
   rating?: number;
+  order?: number;
 }) {
   await connectDB();
   
   const updateData: any = { ...data };
-  
-  // Handle date conversions - parse as IST midnight
-  if (data.startDate) updateData.startDate = parseToISTMidnight(data.startDate);
-  if (data.completedDate) updateData.completedDate = parseToISTMidnight(data.completedDate);
-  
-  // If marking as completed, set completedDate to today IST midnight
-  if (data.status === 'completed' && !data.completedDate) {
-    updateData.completedDate = getTodayISTMidnight();
+
+  if (data.status !== undefined) {
+    updateData.status = normalizeBookStatus(data.status);
+  }
+
+  if (data.category !== undefined || data.subcategory !== undefined) {
+    updateData.category = data.category ?? data.subcategory ?? 'General';
+    updateData.subcategory = updateData.category;
+  }
+
+  const startedOnInput = data.startedOn ?? data.startDate;
+  const finishedOnInput = data.finishedOn ?? data.completedDate;
+
+  if (startedOnInput !== undefined) {
+    updateData.startedOn = startedOnInput ? parseToISTMidnight(startedOnInput) : null;
+    updateData.startDate = updateData.startedOn;
+  }
+
+  if (finishedOnInput !== undefined) {
+    updateData.finishedOn = finishedOnInput ? parseToISTMidnight(finishedOnInput) : null;
+    updateData.completedDate = updateData.finishedOn;
+  }
+
+  if (updateData.status === 'reading' && !updateData.startedOn) {
+    const existing = await Book.findById(bookId).lean();
+    if (existing && !(existing as any).startedOn && !(existing as any).startDate) {
+      const today = getTodayISTMidnight();
+      updateData.startedOn = today;
+      updateData.startDate = today;
+    }
+  }
+
+  if (updateData.status === 'finished' && updateData.finishedOn === undefined) {
+    const today = getTodayISTMidnight();
+    updateData.finishedOn = today;
+    updateData.completedDate = today;
+  }
+
+  if (updateData.status === 'not-started') {
+    updateData.finishedOn = null;
+    updateData.completedDate = null;
   }
   
   await Book.findByIdAndUpdate(bookId, updateData);
@@ -315,10 +388,11 @@ export async function checkInBook(bookId: string, currentPage?: number, notes?: 
     lastReadDate: logDate,
   };
   
-  // If book was 'to-read' or 'paused', change to 'reading' and set startDate if not set
-  if (book.status === 'to-read' || book.status === 'paused') {
+  // If book was not-started, move to reading and set startedOn if missing
+  if (normalizeBookStatus((book as any).status) === 'not-started') {
     updateData.status = 'reading';
-    if (!book.startDate) {
+    if (!(book as any).startedOn && !(book as any).startDate) {
+      updateData.startedOn = logDate;
       updateData.startDate = logDate;
     }
   }
@@ -332,7 +406,8 @@ export async function checkInBook(bookId: string, currentPage?: number, notes?: 
     
     // Auto-complete if reached total pages
     if (book.totalPages && currentPage >= book.totalPages) {
-      updateData.status = 'completed';
+      updateData.status = 'finished';
+      updateData.finishedOn = logDate;
       updateData.completedDate = logDate;
     }
   }
@@ -419,7 +494,7 @@ export async function getBooksByDomain(domainId: string, page: number = 1, limit
 export async function getBooksTableData(
   page: number = 1, 
   limit: number = 50,
-  sortField: string = 'lastReadDate',
+  sortField: string = 'order',
   sortOrder: 'asc' | 'desc' = 'desc',
   filters?: {
     status?: string;
@@ -431,12 +506,15 @@ export async function getBooksTableData(
   
   // Build query
   let query: any = {};
-  if (filters?.status) query.status = filters.status;
+  if (filters?.status && ALLOWED_BOOK_STATUSES.includes(filters.status as any)) {
+    query.status = filters.status;
+  }
   if (filters?.domainId) query.domainId = filters.domainId;
   if (filters?.search) {
     query.$or = [
       { title: { $regex: filters.search, $options: 'i' } },
       { author: { $regex: filters.search, $options: 'i' } },
+      { category: { $regex: filters.search, $options: 'i' } },
       { subcategory: { $regex: filters.search, $options: 'i' } }
     ];
   }
@@ -461,6 +539,10 @@ export async function getBooksTableData(
       ...book,
       _id: book._id.toString(),
       domainId: book.domainId.toString(),
+      category: (book as any).category || (book as any).subcategory || 'General',
+      status: normalizeBookStatus((book as any).status),
+      startedOn: (book as any).startedOn || (book as any).startDate || null,
+      finishedOn: (book as any).finishedOn || (book as any).completedDate || null,
       domain: domain ? { 
         _id: (domain as any)._id.toString(),
         name: (domain as any).name, 
@@ -485,9 +567,11 @@ export async function bulkImportBooks(booksData: Array<{
   title: string;
   author?: string;
   domain: string; // Domain name, will auto-create if doesn't exist
-  subcategory: string;
+  category?: string;
+  subcategory?: string;
   totalPages?: number;
   status?: string;
+  startedOn?: string;
   startDate?: string;
   notes?: string;
 }>) {
@@ -502,7 +586,7 @@ export async function bulkImportBooks(booksData: Array<{
   // Process each book
   for (const bookData of booksData) {
     try {
-      if (!bookData.title || !bookData.domain || !bookData.subcategory) {
+      if (!bookData.title || !bookData.domain) {
         results.failed++;
         results.errors.push(`Missing required fields for: ${bookData.title || 'Unknown'}`);
         continue;
@@ -530,10 +614,12 @@ export async function bulkImportBooks(booksData: Array<{
         domainId: (domain as any)._id,
         title: bookData.title,
         author: bookData.author || '',
-        subcategory: bookData.subcategory,
+        category: bookData.category || bookData.subcategory || 'General',
+        subcategory: bookData.category || bookData.subcategory || 'General',
         totalPages: bookData.totalPages || 0,
-        status: bookData.status || 'reading',
-        startDate: bookData.startDate ? parseToISTMidnight(bookData.startDate) : today,
+        status: normalizeBookStatus(bookData.status),
+        startedOn: (bookData.startedOn || bookData.startDate) ? parseToISTMidnight(bookData.startedOn || bookData.startDate || '') : today,
+        startDate: (bookData.startedOn || bookData.startDate) ? parseToISTMidnight(bookData.startedOn || bookData.startDate || '') : today,
         notes: bookData.notes || '',
         lastReadDate: today
       });

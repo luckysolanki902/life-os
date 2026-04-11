@@ -201,8 +201,11 @@ export const bookSchema: RxJsonSchema<any> = {
     domainId: { type: 'string', maxLength: 100 },
     title: { type: 'string' },
     author: { type: ['string', 'null'] },
-    subcategory: { type: 'string' },
+    category: { type: 'string' },
+    subcategory: { type: ['string', 'null'] },
     status: { type: 'string', maxLength: 50 },
+    startedOn: { type: ['string', 'null'] },
+    finishedOn: { type: ['string', 'null'] },
     startDate: { type: ['string', 'null'] },
     completedDate: { type: ['string', 'null'] },
     lastReadDate: { type: ['string', 'null'], maxLength: 50 },
@@ -215,7 +218,7 @@ export const bookSchema: RxJsonSchema<any> = {
     updatedAt: { type: 'string', maxLength: 50 },
     _deleted: { type: 'boolean' },
   },
-  required: ['id', 'title', 'domainId', 'subcategory'],
+  required: ['id', 'title', 'domainId', 'category', 'status'],
   indexes: ['status', 'domainId', 'lastReadDate', 'updatedAt'],
 };
 

@@ -4,18 +4,21 @@ const BookSchema = new mongoose.Schema({
   domainId: { type: mongoose.Schema.Types.ObjectId, ref: 'BookDomain', required: true },
   title: { type: String, required: true },
   author: { type: String },
-  subcategory: { type: String, required: true }, // e.g., "Marketing", "Validation" for Startups domain
+  category: { type: String, required: true, default: 'General' },
+  subcategory: { type: String }, // Backward compatibility for older data
   
   // Status managed by logic
   status: { 
     type: String, 
-    enum: ['to-read', 'reading', 'paused', 'completed', 'dropped'],
-    default: 'to-read' 
+    enum: ['not-started', 'reading', 'finished'],
+    default: 'not-started' 
   },
   
   // Dates
-  startDate: { type: Date },
-  completedDate: { type: Date },
+  startedOn: { type: Date },
+  finishedOn: { type: Date },
+  startDate: { type: Date }, // Backward compatibility alias
+  completedDate: { type: Date }, // Backward compatibility alias
   lastReadDate: { type: Date }, // Updated when checked in
   
   // Progress tracking
@@ -33,5 +36,31 @@ const BookSchema = new mongoose.Schema({
 BookSchema.index({ status: 1 });
 BookSchema.index({ lastReadDate: -1 });
 BookSchema.index({ domainId: 1, status: 1 });
+
+BookSchema.pre('validate', function () {
+  const doc = this as any;
+
+  if (!doc.category && doc.subcategory) {
+    doc.category = doc.subcategory;
+  }
+  if (!doc.subcategory && doc.category) {
+    doc.subcategory = doc.category;
+  }
+
+  if (!doc.startedOn && doc.startDate) {
+    doc.startedOn = doc.startDate;
+  }
+  if (!doc.startDate && doc.startedOn) {
+    doc.startDate = doc.startedOn;
+  }
+
+  if (!doc.finishedOn && doc.completedDate) {
+    doc.finishedOn = doc.completedDate;
+  }
+  if (!doc.completedDate && doc.finishedOn) {
+    doc.completedDate = doc.finishedOn;
+  }
+
+});
 
 export default mongoose.models.Book || mongoose.model('Book', BookSchema);
