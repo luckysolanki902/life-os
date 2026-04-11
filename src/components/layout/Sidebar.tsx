@@ -7,6 +7,8 @@ import {
   LayoutDashboard,
   ListTodo,
   Heart,
+  BookMarked,
+  GraduationCap,
   BarChart3,
   LogOut,
 } from 'lucide-react';
@@ -17,6 +19,8 @@ const navItems = [
   { name: 'Home', href: '/', icon: LayoutDashboard },
   { name: 'Routine', href: '/routine', icon: ListTodo },
   { name: 'Health', href: '/health', icon: Heart },
+  { name: 'Books', href: '/books', icon: BookMarked },
+  { name: 'Learning', href: '/learning', icon: GraduationCap },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
 ];
 
