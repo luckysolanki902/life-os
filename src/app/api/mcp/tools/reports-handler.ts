@@ -35,6 +35,7 @@ function textResult(data: unknown, isError = false): ToolResult {
 function getDateRange(period: string): { start: Date; end: Date } {
   const today = dayjs().tz(DEFAULT_TIMEZONE).startOf('day');
   switch (period) {
+    case 'today': return { start: today.toDate(), end: today.add(1, 'day').toDate() };
     case 'last7Days': return { start: today.subtract(6, 'day').toDate(), end: today.add(1, 'day').toDate() };
     case 'last14Days': return { start: today.subtract(13, 'day').toDate(), end: today.add(1, 'day').toDate() };
     case 'thisWeek': return { start: today.startOf('week').toDate(), end: today.add(1, 'day').toDate() };
@@ -51,7 +52,7 @@ function getDateRange(period: string): { start: Date; end: Date } {
     case 'last6Months': return { start: today.subtract(6, 'month').toDate(), end: today.add(1, 'day').toDate() };
     case 'thisYear': return { start: today.startOf('year').toDate(), end: today.add(1, 'day').toDate() };
     case 'allTime': return { start: dayjs('2020-01-01').tz(DEFAULT_TIMEZONE).toDate(), end: today.add(1, 'day').toDate() };
-    default: return { start: today.subtract(6, 'day').toDate(), end: today.add(1, 'day').toDate() };
+    default: return { start: today.toDate(), end: today.add(1, 'day').toDate() };
   }
 }
 
@@ -71,15 +72,18 @@ export async function getOverallReport(args: Record<string, unknown>): Promise<T
   const numDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
 
   // --- Routine ---
-  const [currentLogs, prevLogs] = await Promise.all([
+  const [currentLogs, prevLogs, activeTasks] = await Promise.all([
     DailyLog.find({ date: { $gte: start, $lt: end } }).lean(),
     DailyLog.find({ date: { $gte: prev.start, $lt: prev.end } }).lean(),
+    Task.find({ isActive: true }).countDocuments(),
   ]);
 
   const currentCompleted = (currentLogs as Record<string, unknown>[]).filter((l) => l.status === 'completed').length;
-  const currentTotal = currentLogs.length;
+  // Total = active tasks per day × number of days (tasks that should have been done)
+  const currentTotal = activeTasks * numDays;
   const prevCompleted = (prevLogs as Record<string, unknown>[]).filter((l) => l.status === 'completed').length;
-  const prevTotal = prevLogs.length;
+  const prevNumDays = Math.ceil((prev.end.getTime() - prev.start.getTime()) / 86400000);
+  const prevTotal = activeTasks * prevNumDays;
 
   const completionRate = currentTotal > 0 ? Number(((currentCompleted / currentTotal) * 100).toFixed(1)) : 0;
   const prevCompletionRate = prevTotal > 0 ? Number(((prevCompleted / prevTotal) * 100).toFixed(1)) : 0;
@@ -140,6 +144,7 @@ export async function getOverallReport(args: Record<string, unknown>): Promise<T
       change: Number((completionRate - prevCompletionRate).toFixed(1)),
       completed: currentCompleted,
       total: currentTotal,
+      activeTasks,
       totalPoints,
     },
     weight: {
@@ -181,6 +186,7 @@ export async function getRoutineReport(args: Record<string, unknown>): Promise<T
   const period = (args.period as string) || 'thisWeek';
   const { start, end } = getDateRange(period);
 
+  const numDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
   const tasks = await Task.find({ isActive: true }).lean();
   const logs = await DailyLog.find({ date: { $gte: start, $lt: end } }).lean();
 
@@ -197,22 +203,22 @@ export async function getRoutineReport(args: Record<string, unknown>): Promise<T
     { title: string; domainId: string; completed: number; skipped: number; total: number; points: number }
   > = {};
 
+  // Pre-populate all active tasks so unlogged tasks show 0/numDays (not missing)
+  for (const task of tasks as Record<string, unknown>[]) {
+    const taskId = (task._id as { toString(): string }).toString();
+    taskStats[taskId] = {
+      title: task.title as string,
+      domainId: task.domainId as string,
+      completed: 0,
+      skipped: 0,
+      total: numDays, // expected appearances
+      points: 0,
+    };
+  }
+
   for (const log of logs as Record<string, unknown>[]) {
     const taskId = (log.taskId as { toString(): string }).toString();
-    const task = taskMap.get(taskId);
-    if (!task) continue;
-
-    if (!taskStats[taskId]) {
-      taskStats[taskId] = {
-        title: (task as Record<string, unknown>).title as string,
-        domainId: (task as Record<string, unknown>).domainId as string,
-        completed: 0,
-        skipped: 0,
-        total: 0,
-        points: 0,
-      };
-    }
-    taskStats[taskId].total++;
+    if (!taskStats[taskId]) continue; // inactive task, skip
     if (log.status === 'completed') {
       taskStats[taskId].completed++;
       taskStats[taskId].points += (log.pointsEarned as number) || 0;

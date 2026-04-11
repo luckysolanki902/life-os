@@ -799,8 +799,8 @@ function handleToolsList(): unknown {
           properties: {
             period: {
               type: 'string',
-              enum: ['last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
-              description: 'Time period (default: thisWeek)',
+              enum: ['today', 'last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
+              description: 'Time period (default: today)',
             },
           },
         },
@@ -815,7 +815,8 @@ function handleToolsList(): unknown {
           properties: {
             period: {
               type: 'string',
-              enum: ['last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
+              enum: ['today', 'last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
+              description: 'Time period (default: today)',
             },
           },
         },
@@ -830,7 +831,8 @@ function handleToolsList(): unknown {
           properties: {
             period: {
               type: 'string',
-              enum: ['last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
+              enum: ['today', 'last7Days', 'last14Days', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'last3Months', 'last6Months', 'thisYear', 'allTime'],
+              description: 'Time period (default: today)',
             },
           },
         },

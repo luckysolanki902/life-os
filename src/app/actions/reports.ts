@@ -29,6 +29,9 @@ function getDateRange(period: string): { start: Date; end: Date } {
   const today = dayjs().tz(DEFAULT_TIMEZONE).startOf('day');
   
   switch (period) {
+    case 'today': {
+      return { start: today.toDate(), end: today.add(1, 'day').toDate() };
+    }
     case 'last7Days': {
       // Last 7 days including today
       const sevenDaysAgo = today.subtract(6, 'day');
@@ -73,9 +76,8 @@ function getDateRange(period: string): { start: Date; end: Date } {
       return { start: dayjs('2020-01-01').tz(DEFAULT_TIMEZONE).toDate(), end: today.add(1, 'day').toDate() };
     }
     default:
-      // Default to last 7 days
-      const sevenDaysAgo = today.subtract(6, 'day');
-      return { start: sevenDaysAgo.toDate(), end: today.add(1, 'day').toDate() };
+      // Default to today
+      return { start: today.toDate(), end: today.add(1, 'day').toDate() };
   }
 }
 
