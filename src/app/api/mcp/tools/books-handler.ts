@@ -268,9 +268,12 @@ export async function updateBook(args: Record<string, unknown>): Promise<ToolRes
     }
   }
   
-  // If updating to completed status, set completedDate
-  if (cleanData.status === 'completed') {
-    cleanData.completedDate = new Date();
+  // Auto-set dates based on status changes
+  if (cleanData.status === 'reading' && !cleanData.startedOn) {
+    cleanData.startedOn = new Date();
+  }
+  if (cleanData.status === 'finished') {
+    cleanData.finishedOn = new Date();
   }
   
   // If updating domain by name, find or create it
@@ -346,8 +349,11 @@ export async function updateBooks(updates: Array<Record<string, unknown>>): Prom
         }
       }
       
-      if (cleanData.status === 'completed') {
-        cleanData.completedDate = new Date();
+      if (cleanData.status === 'reading' && !cleanData.startedOn) {
+        cleanData.startedOn = new Date();
+      }
+      if (cleanData.status === 'finished') {
+        cleanData.finishedOn = new Date();
       }
       
       if (cleanData.domainId) {
@@ -439,13 +445,11 @@ export async function deleteBooks(ids: string[]): Promise<ToolResult> {
 export async function getBookStats(): Promise<ToolResult> {
   await connectDB();
   
-  const [totalBooks, toRead, reading, paused, completed, dropped] = await Promise.all([
+  const [totalBooks, notStarted, reading, finished] = await Promise.all([
     Book.countDocuments(),
-    Book.countDocuments({ status: 'to-read' }),
+    Book.countDocuments({ status: 'not-started' }),
     Book.countDocuments({ status: 'reading' }),
-    Book.countDocuments({ status: 'paused' }),
-    Book.countDocuments({ status: 'completed' }),
-    Book.countDocuments({ status: 'dropped' }),
+    Book.countDocuments({ status: 'finished' }),
   ]);
   
   // Get currently reading books
@@ -457,9 +461,12 @@ export async function getBookStats(): Promise<ToolResult> {
   const readingProgress = currentlyReading.map((book: Record<string, unknown>) => ({
     id: (book._id as { toString(): string }).toString(),
     title: book.title,
+    author: book.author || null,
+    category: book.category || book.subcategory || null,
     currentPage: book.currentPage || 0,
     totalPages: book.totalPages || 0,
     progress: book.totalPages ? Math.round(((book.currentPage as number || 0) / (book.totalPages as number)) * 100) : null,
+    startedOn: book.startedOn || book.startDate || null,
     lastReadDate: book.lastReadDate,
   }));
   
@@ -467,11 +474,9 @@ export async function getBookStats(): Promise<ToolResult> {
     stats: {
       total: totalBooks,
       byStatus: {
-        toRead,
+        notStarted,
         reading,
-        paused,
-        completed,
-        dropped,
+        finished,
       },
     },
     currentlyReading: readingProgress,

@@ -5,9 +5,9 @@
 
 // Server info for discovery
 export const serverInfo = {
-  name: 'lifedashboard-books-mcp',
-  version: '1.0.0',
-  description: 'MCP server for managing books in LifeDashboard',
+  name: 'lifedashboard-mcp',
+  version: '2.0.0',
+  description: 'MCP server for LifeDashboard — Routine, Health, Books, Learning, Reports & Stats',
   capabilities: {
     tools: {
       listChanged: false,
