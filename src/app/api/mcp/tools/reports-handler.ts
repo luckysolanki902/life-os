@@ -66,7 +66,7 @@ function getPreviousRange(period: string): { start: Date; end: Date } {
 export async function getOverallReport(args: Record<string, unknown>): Promise<ToolResult> {
   await connectDB();
 
-  const period = (args.period as string) || 'thisWeek';
+  const period = (args.period as string) || 'today';
   const { start, end } = getDateRange(period);
   const prev = getPreviousRange(period);
   const numDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
@@ -183,7 +183,7 @@ export async function getOverallReport(args: Record<string, unknown>): Promise<T
 export async function getRoutineReport(args: Record<string, unknown>): Promise<ToolResult> {
   await connectDB();
 
-  const period = (args.period as string) || 'thisWeek';
+  const period = (args.period as string) || 'today';
   const { start, end } = getDateRange(period);
 
   const numDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
@@ -262,7 +262,7 @@ export async function getRoutineReport(args: Record<string, unknown>): Promise<T
 export async function getHealthReport(args: Record<string, unknown>): Promise<ToolResult> {
   await connectDB();
 
-  const period = (args.period as string) || 'thisWeek';
+  const period = (args.period as string) || 'today';
   const { start, end } = getDateRange(period);
 
   // Weight trend
