@@ -16,7 +16,6 @@ import {
 const MIN_ROUTINE_TASKS = 5;
 const MIN_BOOK_READING_MINUTES = 5;
 const BOOK_TASK_POINTS = 20;
-const EXERCISE_TASK_POINTS = 25;
 
 // ===== Batch helpers: fetch all data for a date range in 2 queries =====
 
@@ -318,22 +317,6 @@ export async function getSpecialTasks(dateStr?: string) {
     source: string;
   }> = [];
   
-  // Check for exercise logs today
-  const exerciseLogs = await ExerciseLog.find({
-    date: { $gte: startOfDay, $lt: endOfDay }
-  });
-  
-  if (exerciseLogs.length > 0) {
-    specialTasks.push({
-      _id: `special-exercise-${today}`,
-      title: 'Do Exercise',
-      type: 'health',
-      points: EXERCISE_TASK_POINTS,
-      completed: true,
-      source: `${exerciseLogs.length} exercise(s) logged`
-    });
-  }
-  
   // Check for book reading logs today (at least 5 minutes per book)
   const bookLogs = await BookLog.find({
     date: { $gte: startOfDay, $lt: endOfDay },
@@ -384,7 +367,7 @@ export async function getTotalPointsWithBonuses() {
   const { startOfDay, endOfDay } = getDateRange(today);
 
   // Run all independent queries in parallel
-  const [basePointsResult, streakBonusResult, booksReadToday, exerciseDayCount] = await Promise.all([
+  const [basePointsResult, streakBonusResult, booksReadToday] = await Promise.all([
     DailyLog.aggregate([
       { $match: { status: 'completed' } },
       { $group: { _id: null, total: { $sum: '$pointsEarned' } } },
@@ -395,22 +378,16 @@ export async function getTotalPointsWithBonuses() {
     Book.countDocuments({
       lastReadDate: { $gte: startOfDay, $lt: endOfDay },
     }),
-    // Count unique exercise days with aggregation instead of loading all dates into memory
-    ExerciseLog.aggregate([
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: 'Asia/Kolkata' } } } },
-      { $count: 'total' },
-    ]),
   ]);
 
   const basePoints = basePointsResult[0]?.total || 0;
   const streakBonus = streakBonusResult[0]?.total || 0;
   const bookPoints = booksReadToday * BOOK_TASK_POINTS;
-  const exercisePoints = (exerciseDayCount[0]?.total || 0) * EXERCISE_TASK_POINTS;
 
   return {
     basePoints,
     streakBonus,
-    specialTaskPoints: bookPoints + exercisePoints,
-    totalPoints: basePoints + streakBonus + bookPoints + exercisePoints,
+    specialTaskPoints: bookPoints,
+    totalPoints: basePoints + streakBonus + bookPoints,
   };
 }

@@ -150,12 +150,6 @@ export async function getOverallReport(period: string = 'thisWeek') {
   });
   const periodBookPoints = booksReadInPeriod * 5; // BOOK_TASK_POINTS = 5
   
-  // Count exercise days in period
-  const exerciseDaysInPeriod = await ExerciseLog.distinct('date', {
-    date: { $gte: start, $lt: end }
-  });
-  const periodExercisePoints = exerciseDaysInPeriod.length * 5; // EXERCISE_TASK_POINTS = 5
-  
   // Count learning sessions in period
   const learningSessionsInPeriod = await SimpleLearningLog.aggregate([
     { $match: { date: { $gte: start, $lt: end } } },
@@ -164,7 +158,7 @@ export async function getOverallReport(period: string = 'thisWeek') {
   ]);
   const periodLearningPoints = (learningSessionsInPeriod[0]?.total || 0) * 10; // LEARNING_TASK_POINTS = 10
   
-  const totalPoints = routinePoints + periodStreakBonus + periodBookPoints + periodExercisePoints + periodLearningPoints;
+  const totalPoints = routinePoints + periodStreakBonus + periodBookPoints + periodLearningPoints;
   
   // Previous period points (same calculation)
   const prevRoutinePointsResult = await DailyLog.aggregate([
@@ -184,11 +178,6 @@ export async function getOverallReport(period: string = 'thisWeek') {
   });
   const prevBookPoints = prevBooksRead * 5;
   
-  const prevExerciseDaysCount = await ExerciseLog.distinct('date', {
-    date: { $gte: prev.start, $lt: prev.end }
-  });
-  const prevExercisePoints = prevExerciseDaysCount.length * 5;
-  
   const prevLearningSessions = await SimpleLearningLog.aggregate([
     { $match: { date: { $gte: prev.start, $lt: prev.end } } },
     { $group: { _id: { date: '$date', skill: '$skillName' } } },
@@ -196,7 +185,7 @@ export async function getOverallReport(period: string = 'thisWeek') {
   ]);
   const prevLearningPoints = (prevLearningSessions[0]?.total || 0) * 10;
   
-  const prevTotalPoints = prevRoutinePoints + prevStreakBonus + prevBookPoints + prevExercisePoints + prevLearningPoints;
+  const prevTotalPoints = prevRoutinePoints + prevStreakBonus + prevBookPoints + prevLearningPoints;
   
   // HEALTH: Exercise days (unique days with exercise), weight change
   const exerciseDaysResult = await ExerciseLog.aggregate([
